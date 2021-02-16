@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
 		sockaddr_in from;
 		int fromSize = sizeof(from);
 		auto len = recvfrom(in, buf, 1024, 0, (SOCKADDR*)&from, &fromSize);
-		if (len == SOCKET_ERROR) { }
+		if (len == SOCKET_ERROR) { handleError(); }
 		printf("received %i bytes", len);
 
 #ifdef _WIN32
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
 #endif // #ifdef _WIN32
 }
 
-void handlError() {
+void handleError() {
 #ifdef _WIN32
 	wprintf(L"recvfrom failed with error %d\n", WSAGetLastError());
 	wchar_t* s = NULL;
