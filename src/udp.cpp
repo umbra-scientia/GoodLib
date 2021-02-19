@@ -193,5 +193,6 @@ void UDP::UnListen(udp_callback_t callback) {
 #endif
 
 	thread_handle->join();
+	delete thread_handle;
 	thread_handle = nullptr;
 }
