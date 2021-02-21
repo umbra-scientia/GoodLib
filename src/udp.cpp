@@ -14,10 +14,26 @@ using namespace std;
 
 namespace goodlib {
 	namespace udp {
+		struct CallbackData {
+			udp_callback_t callback;
+			void* userdata;
+
+			bool operator==(const CallbackData& rhs) const {
+				return callback == rhs.callback && userdata == rhs.userdata;
+			}
+		};
+		struct CallbackDataHash {
+			std::size_t operator()(const CallbackData& v) const {
+				auto hash = std::hash<udp_callback_t>()(v.callback);
+				hash ^= std::hash<void*>()(v.userdata) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+				return hash;
+			}
+		};
+
 		/// guards thread_handle, cbs, and end
 		mutex udpmutex;
-		thread* thread_handle;
-		unordered_set<udp_callback_t> cbs;
+		thread* thread_handle = nullptr;
+		unordered_set<CallbackData, CallbackDataHash> cbs;
 #ifdef _WIN32
 		WSAEVENT end_event = 0;
 #else
@@ -79,11 +95,11 @@ void UDP::Send(const void* buffer, int length, udp_address_t addr) {
 	sendto(out, (char*)buffer, length, 0, addr.addr, addr.len);
 }
 
-void UDP::Listen(udp_callback_t callback) {
+void UDP::Listen(udp_callback_t callback, void* userdata) {
 	lock_guard lock(udpmutex);
 	init();
 
-	cbs.insert(callback);
+	cbs.insert({ callback, userdata });
 	if (thread_handle) { return; }
 
 	auto in = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
@@ -161,8 +177,9 @@ void UDP::Listen(udp_callback_t callback) {
 			}
 
 			lock_guard lock(udpmutex);
-			for (auto&& cb : cbs) {
-				cb(&buf[offset], len - offset, udp_address_t { (sockaddr*)&from, fromSize });
+			for (auto [callback, userdata] : cbs) {
+				udp_address_t address { (sockaddr*)&from, fromSize };
+				callback(userdata, &buf[offset], len - offset, address);
 			}
 		}
 
@@ -177,9 +194,9 @@ void UDP::Listen(udp_callback_t callback) {
 	});
 }
 
-void UDP::UnListen(udp_callback_t callback) {
+void UDP::UnListen(udp_callback_t callback, void* userdata) {
 	lock_guard lock(udpmutex);
-	cbs.erase(callback);
+	cbs.erase({ callback, userdata });
 	if (cbs.size()) { return; }
 
 #ifdef _WIN32
