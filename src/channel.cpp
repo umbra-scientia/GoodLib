@@ -1,4 +1,4 @@
-#include "../include/channel.h"
+#include "channel.h"
 #include <random>
 #include <memory.h>
 #include <thread>

@@ -1,4 +1,4 @@
-#include "../include/UDP.h"
+#include "udp.h"
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -11,6 +11,8 @@ using namespace std;
 #ifndef SOCKET
 #define SOCKET int
 #endif
+
+// #define USE_RAW_SOCKETS
 
 namespace goodlib {
 	namespace udp {
@@ -42,6 +44,7 @@ namespace goodlib {
 
 		void init() {
 #ifdef _WIN32
+			lock_guard<mutex> lock(udpmutex);
 			static WSAData data {};
 			if (!data.wVersion) { WSAStartup(MAKEWORD(2, 2), &data); }
 #endif
@@ -67,42 +70,64 @@ namespace goodlib {
 
 using namespace goodlib::udp;
 
+udp_address_t::udp_address_t() {
+	len = 0;
+	addr = 0;
+	crap = 0;
+}
+
+udp_address_t::~udp_address_t() {
+	if (crap) freeaddrinfo(crap);
+}
+
 udp_address_t UDP::Lookup(const char* hostname) {
 	init();
-
-	struct addrinfo* result;
+	udp_address_t r;
+	struct addrinfo* result = 0;
+	
+	//inet_pton(AF_INET, "0.0.0.0", &src.sin_addr.s_addr);
+	
 	auto err = getaddrinfo(hostname, NULL, NULL, &result);
 	if (err != 0) {
 		fprintf(stderr, "error: %s\n", gai_strerror(err));
 		exit(1);
 	}
-
-	auto ai_addrlen = result->ai_addrlen;
-	auto ai_addr = (sockaddr*)malloc(ai_addrlen);
-	memcpy(ai_addr, result->ai_addr, ai_addrlen);
-	freeaddrinfo(result);
-
-	return udp_address_t { ai_addr, (socklen_t)ai_addrlen };
+	r.crap = result;
+	r.proto = AF_INET;
+	r.len = result->ai_addrlen;
+	r.addr = result->ai_addr;
+	return r;
 }
 
 void UDP::Send(const void* buffer, int length, udp_address_t addr) {
 	static auto out = ([] {
+		printf("sawkit\n");
 		auto out = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if (out == -1) { handleError(); }
 		return out;
 	})();
 
-	sendto(out, (char*)buffer, length, 0, addr.addr, addr.len);
+	struct sockaddr_in adr;
+	memset(&adr, 0, sizeof(adr));
+	adr.sin_family = AF_INET; 
+	adr.sin_port = htons(27255);
+	adr.sin_addr.s_addr = INADDR_ANY; 
+
+	sendto(out, (char*)buffer, length, 0, (const sockaddr*)&adr, sizeof(adr));
 }
 
 void UDP::Listen(udp_callback_t callback, void* userdata) {
-	lock_guard<mutex> lock(udpmutex);
 	init();
+	lock_guard<mutex> lock(udpmutex);
 
 	cbs.insert({ callback, userdata });
 	if (thread_handle) { return; }
 
+#ifdef USE_RAW_SOCKETS
 	auto in = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
+#else
+	auto in = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+#endif
 	if (in == -1) { handleError(); }
 
 #ifdef _WIN32
@@ -114,7 +139,11 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 	thread_handle = new thread([=] {
 		sockaddr_in src;
 		src.sin_family = AF_INET;
+#ifdef USE_RAW_SOCKETS
 		src.sin_port = htons(0);
+#else
+		src.sin_port = htons(27255);
+#endif
 		inet_pton(AF_INET, "0.0.0.0", &src.sin_addr.s_addr);
 		bind(in, (sockaddr*)&src, sizeof(src));
 
@@ -159,6 +188,7 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			select(FD_SETSIZE, &rfds, nullptr, nullptr, nullptr);
 			if (FD_ISSET(end_event[0], &rfds)) { break; }
 			auto len = recvfrom(in, buf, sizeof(buf), 0, (sockaddr*)&from, &fromSize);
+			printf("recvfrom returned\n");
 			if (len == -1) {
 				handleError();
 			} else if (len == 0) {
@@ -166,7 +196,8 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			}
 #endif
 
-			int offset;
+			int offset = 0;
+#ifdef USE_RAW_SOCKETS
 			if (from.sin_family == AF_INET) {
 				offset = 28;
 			} else if (from.sin_family == AF_INET6) {
@@ -175,10 +206,11 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 				printf("family %i not supported", from.sin_family);
 				exit(1);
 			}
-
+#endif
 			lock_guard<mutex> lock(udpmutex);
 			for (auto [callback, userdata] : cbs) {
-				udp_address_t address { (sockaddr*)&from, fromSize };
+				udp_address_t address;
+				//address { (sockaddr*)&from, fromSize };
 				callback(userdata, &buf[offset], len - offset, address);
 			}
 		}
