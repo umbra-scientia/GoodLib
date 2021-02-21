@@ -1,4 +1,4 @@
-#include "../include/goodlib/UDP.h"
+#include "../include/UDP.h"
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -80,7 +80,7 @@ void UDP::Send(const void* buffer, int length, udp_address_t addr) {
 }
 
 void UDP::Listen(udp_callback_t callback) {
-	lock_guard lock(udpmutex);
+	lock_guard<mutex> lock(udpmutex);
 	init();
 
 	cbs.insert(callback);
@@ -160,7 +160,7 @@ void UDP::Listen(udp_callback_t callback) {
 				exit(1);
 			}
 
-			lock_guard lock(udpmutex);
+			lock_guard<mutex> lock(udpmutex);
 			for (auto&& cb : cbs) {
 				cb(&buf[offset], len - offset, udp_address_t { (sockaddr*)&from, fromSize });
 			}
@@ -178,7 +178,7 @@ void UDP::Listen(udp_callback_t callback) {
 }
 
 void UDP::UnListen(udp_callback_t callback) {
-	lock_guard lock(udpmutex);
+	lock_guard<mutex> lock(udpmutex);
 	cbs.erase(callback);
 	if (cbs.size()) { return; }
 
