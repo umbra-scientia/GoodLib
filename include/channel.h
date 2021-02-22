@@ -1,5 +1,6 @@
-#include "udp.h"
 #include "types.h"
+#include "udp.h"
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,6 +22,8 @@ struct PacketStatus {
 };
 
 struct Channel {
+	static const u16 history_len = 4096;
+
 	struct CallbackData {
 		ChannelCallback callback;
 		void* userdata;
@@ -46,7 +49,7 @@ struct Channel {
 	User* user;
 	std::string app;
 	std::unordered_set<CallbackData, CallbackDataHash> callbacks;
-	u32 next_send_id, recv_id;
-	std::unordered_set<u32> recv_ids;
+	u32 next_lseq = 0, rseq = 0;
+	bool rseqs[history_len];
 	std::unordered_map<u32, PacketStatus*> statuses;
 };

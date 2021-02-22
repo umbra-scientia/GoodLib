@@ -1,6 +1,6 @@
-#include "channel.h"
+#include "../include/goodlib/channel.h"
+#include <cstdlib>
 #include <random>
-#include <memory.h>
 #include <thread>
 
 using namespace std;
@@ -16,18 +16,19 @@ namespace channel {
 	thread* thread_handle = nullptr;
 
 	void init() {
-		if (!thread_handle) {
-			thread_handle = new thread([] {
-				while (true) {
-					this_thread::sleep_for(1s);
+		if (thread_handle) { return; }
 
-					for (auto&& send : sendbuf) {
-						UDP::Send(send.data, send.length, send.address);
-						free(send.data);
-					}
+		thread_handle = new thread([] {
+			while (true) {
+				// TODO: make dynamic
+				this_thread::sleep_for(100ms);
+
+				for (auto&& send : sendbuf) {
+					UDP::Send(send.data, send.length, send.address);
+					free(send.data);
 				}
-			});
-		}
+			}
+		});
 	}
 }
 
@@ -36,23 +37,31 @@ using namespace channel;
 void udpcb(void* userdata, void* data, int length, udp_address_t from_hint) {
 	auto channel = (Channel*)userdata;
 
+	// TODO: use crypto stuff in header instead of this
 	if (memcmp(channel->user->address.addr->sa_data, from_hint.addr->sa_data, 14) != 0) { return; }
 
 	auto header = ((u32*)data)[0];
-	auto send_id = 0; // TODO: write the thing here
-	auto recv_id = 0; // TODO: write the thing here
+	auto rseq = (channel->rseq & 0xFFFFFC00) | (header >> 22);
+	if (rseq - channel->rseq >= 512) { rseq -= 0x200; }
+	auto lseq = (channel->next_lseq & 0xFFFFFC00) | ((header >> 12) & 0x3FF);
+	if (lseq > channel->next_lseq) { lseq -= 0x200; }
 
-	channel->recv_id = (channel->recv_id > send_id) ? (channel->recv_id) : (send_id);
-	channel->recv_ids.insert(send_id); // TODO: clean up recv_ids eventually?
-	auto&& status = channel->statuses.at(recv_id);
+	channel->rseqs[rseq % Channel::history_len] = true;
+	if (rseq > channel->rseq) {
+		for (u32 i = channel->rseq + 1; i < rseq; i++) {
+			channel->rseqs[i % Channel::history_len] = false;
+		}
+		channel->rseq = rseq;
+	}
+
+	auto&& status = channel->statuses.at(lseq);
 	status->confirmed = true;
 	status->onConfirm(channel, status);
-
-	recv_id--;
-	for (size_t i = 0; i < 12; i++) {
-		auto flag = (header >> i) & 1;
+	for (size_t i = 1; i <= 12; i++) {
+		auto flag = (header >> (i - 1)) & 1;
 		if (flag) {
-			auto&& status = channel->statuses.at(recv_id - i);
+			auto&& status = channel->statuses.at(lseq - i);
+			if (status->confirmed) { continue; }
 			status->confirmed = true;
 			status->onConfirm(channel, status);
 		}
@@ -66,8 +75,7 @@ void udpcb(void* userdata, void* data, int length, udp_address_t from_hint) {
 Channel::Channel(User* user, std::string app) {
 	this->user = user;
 	this->app = app;
-	next_send_id = 0;
-	recv_id = 0;
+	*rseqs = {};
 	UDP::Listen(udpcb, this);
 }
 
@@ -80,16 +88,16 @@ void Channel::Recv(ChannelCallback callback, void* userdata) {
 }
 
 void Channel::Send(const void* data, u32 length, PacketStatus* handler) {
-	auto send_id = next_send_id++;
+	auto lseq = next_lseq++;
 
 	auto tosend = (char*)malloc(length + 16);
 	auto header = &((u32*)tosend)[0];
-	// 10 bits for send_id, 10 for latest recv_id, and 12 for prev recv_ids
-	*header = (send_id << 22) | (recv_id & 0x3FF << 12);
-	for (auto&& prev_recv_id : recv_ids) {
-		*header |= (1 << (recv_id - prev_recv_id - 1)) & 0xFFF;
+	// 10 bits for lseq, 10 for latest rseq, and 12 for prev rseqs
+	*header = (lseq << 22) | (rseq & 0x3FF << 12);
+	for (size_t i = 1; i <= 12; i++) {
+		*header |= rseqs[(rseq - i + history_len) % history_len] << i;
 	}
-	// 12 random bytes
+	// TODO: 12 bytes of crypto stuff
 	for (size_t i = 1; i < 4; i++) {
 		((i32*)tosend)[i] = 0;
 	}
@@ -97,7 +105,7 @@ void Channel::Send(const void* data, u32 length, PacketStatus* handler) {
 	memcpy(&tosend[16], data, length);
 
 	sendbuf.push_back(SendData { tosend, length, user->address });
-	statuses.insert({ send_id++, handler });
+	statuses.insert({ lseq, handler });
 }
 
 f32 Channel::GetLatency() {
