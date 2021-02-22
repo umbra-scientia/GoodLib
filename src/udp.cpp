@@ -84,9 +84,9 @@ udp_address_t UDP::Lookup(const char* hostname) {
 	init();
 	udp_address_t r;
 	struct addrinfo* result = 0;
-	
-	//inet_pton(AF_INET, "0.0.0.0", &src.sin_addr.s_addr);
-	
+
+	// inet_pton(AF_INET, "0.0.0.0", &src.sin_addr.s_addr);
+
 	auto err = getaddrinfo(hostname, NULL, NULL, &result);
 	if (err != 0) {
 		fprintf(stderr, "error: %s\n", gai_strerror(err));
@@ -109,9 +109,9 @@ void UDP::Send(const void* buffer, int length, udp_address_t addr) {
 
 	struct sockaddr_in adr;
 	memset(&adr, 0, sizeof(adr));
-	adr.sin_family = AF_INET; 
+	adr.sin_family = AF_INET;
 	adr.sin_port = htons(27255);
-	adr.sin_addr.s_addr = INADDR_ANY; 
+	adr.sin_addr.s_addr = INADDR_ANY;
 
 	sendto(out, (char*)buffer, length, 0, (const sockaddr*)&adr, sizeof(adr));
 }
@@ -210,7 +210,7 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			lock_guard<mutex> lock(udpmutex);
 			for (auto [callback, userdata] : cbs) {
 				udp_address_t address;
-				//address { (sockaddr*)&from, fromSize };
+				// address { (sockaddr*)&from, fromSize };
 				callback(userdata, &buf[offset], len - offset, address);
 			}
 		}
