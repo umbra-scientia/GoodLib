@@ -12,9 +12,9 @@ using namespace std::chrono;
 using namespace std::literals::chrono_literals;
 
 //const steady_clock::time_point y2k { January / 1 / 2000 };
-
 /*FIXME*/ const steady_clock::time_point y2k = std::chrono::steady_clock::now();
-/*FIXME*/ static bool USE_RAW_SOCKETS = false;
+
+static bool USE_RAW_SOCKETS = true;
 
 namespace goodlib {
 	namespace udp {
@@ -131,6 +131,7 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 	}
 	if (in == -1) {
 		in = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		USE_RAW_SOCKETS = false;
 	}
 	if (in == -1) {
 		handleError();
@@ -190,7 +191,6 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			select(FD_SETSIZE, &rfds, nullptr, nullptr, nullptr);
 			if (FD_ISSET(end_event[0], &rfds)) { break; }
 			auto len = recvfrom(in, buf, sizeof(buf), 0, (sockaddr*)&from, &fromSize);
-			printf("recvfrom returned\n");
 			if (len == -1) {
 				handleError();
 			} else if (len == 0) {
