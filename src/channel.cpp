@@ -4,16 +4,20 @@
 #include <thread>
 
 using namespace std;
+using namespace std::chrono;
 
 namespace channel {
 	struct SendData {
+		Channel* channel;
+		u32 lseq;
 		void* data;
 		u32 length;
-		udp_address_t address;
 	};
 
 	vector<SendData> sendbuf;
 	thread* thread_handle = nullptr;
+
+	u64 ewma_step(u64 x, u64 new_x, f64 weight) { return x * weight + new_x * (1 - weight); }
 
 	void init() {
 		if (thread_handle) { return; }
@@ -24,7 +28,8 @@ namespace channel {
 				this_thread::sleep_for(100ms);
 
 				for (auto&& send : sendbuf) {
-					UDP::Send(send.data, send.length, send.address);
+					send.channel->statuses.at(send.lseq)->timestamp =
+						UDP::Send(send.data, send.length, send.channel->user->address);
 					free(send.data);
 				}
 			}
@@ -34,7 +39,7 @@ namespace channel {
 
 using namespace channel;
 
-void udpcb(void* userdata, void* data, int length, udp_address_t from_hint) {
+void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t from_hint) {
 	auto channel = (Channel*)userdata;
 
 	// TODO: use crypto stuff in header instead of this
@@ -45,6 +50,9 @@ void udpcb(void* userdata, void* data, int length, udp_address_t from_hint) {
 	if (rseq - channel->rseq >= 512) { rseq -= 0x200; }
 	auto lseq = (channel->next_lseq & 0xFFFFFC00) | ((header >> 12) & 0x3FF);
 	if (lseq > channel->next_lseq) { lseq -= 0x200; }
+
+	auto new_rate = timestamp - channel->statuses.at(lseq)->timestamp;
+	channel->rate = ewma_step(channel->rate, new_rate, 0.9);
 
 	channel->rseqs[rseq % Channel::history_len] = true;
 	if (rseq > channel->rseq) {
@@ -104,8 +112,8 @@ void Channel::Send(const void* data, u32 length, PacketStatus* handler) {
 	// rest of data
 	memcpy(&tosend[16], data, length);
 
-	sendbuf.push_back(SendData { tosend, length, user->address });
-	statuses.insert({ lseq, handler });
+	sendbuf.push_back(SendData { this, lseq, tosend, length });
+	statuses.insert({ lseq++, handler });
 }
 
 f32 Channel::GetLatency() {
