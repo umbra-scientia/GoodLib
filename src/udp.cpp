@@ -11,9 +11,10 @@ using namespace std;
 using namespace std::chrono;
 using namespace std::literals::chrono_literals;
 
-const steady_clock::time_point y2k { January / 1 / 2000 };
+//const steady_clock::time_point y2k { January / 1 / 2000 };
 
-// #define USE_RAW_SOCKETS
+/*FIXME*/ const steady_clock::time_point y2k = std::chrono::steady_clock::now();
+/*FIXME*/ static bool USE_RAW_SOCKETS = false;
 
 namespace goodlib {
 	namespace udp {
@@ -102,7 +103,6 @@ udp_address_t UDP::Lookup(const char* hostname) {
 
 u64 UDP::Send(const void* buffer, int length, udp_address_t addr) {
 	static auto out = ([] {
-		printf("sawkit\n");
 		auto out = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if (out == -1) { handleError(); }
 		return out;
@@ -125,12 +125,16 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 	cbs.insert({ callback, userdata });
 	if (thread_handle) { return; }
 
-#ifdef USE_RAW_SOCKETS
-	auto in = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
-#else
-	auto in = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-#endif
-	if (in == -1) { handleError(); }
+	int in = -1;
+	if (USE_RAW_SOCKETS) {
+		in = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
+	}
+	if (in == -1) {
+		in = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	}
+	if (in == -1) {
+		handleError();
+	}
 
 #ifdef _WIN32
 	if (!end_event) { end_event = WSACreateEvent(); }
@@ -141,11 +145,7 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 	thread_handle = new thread([=] {
 		sockaddr_in src;
 		src.sin_family = AF_INET;
-#ifdef USE_RAW_SOCKETS
-		src.sin_port = htons(0);
-#else
-		src.sin_port = htons(27255);
-#endif
+		src.sin_port = htons(USE_RAW_SOCKETS ? 0 : 27255);
 		inet_pton(AF_INET, "0.0.0.0", &src.sin_addr.s_addr);
 		bind(in, (sockaddr*)&src, sizeof(src));
 
@@ -201,16 +201,15 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			u64 timestamp = duration_cast<milliseconds>(steady_clock::now() - y2k).count();
 
 			int offset = 0;
-#ifdef USE_RAW_SOCKETS
-			if (from.sin_family == AF_INET) {
-				offset = 28;
-			} else if (from.sin_family == AF_INET6) {
-				offset = 56;
-			} else {
-				printf("family %i not supported", from.sin_family);
-				exit(1);
+			if (USE_RAW_SOCKETS) {
+				if (from.sin_family == AF_INET) {
+					offset = 28;
+				} else if (from.sin_family == AF_INET6) {
+					offset = 56;
+				} else {
+					continue;
+				}
 			}
-#endif
 			lock_guard<mutex> lock(udpmutex);
 			for (auto [callback, userdata] : cbs) {
 				udp_address_t address;

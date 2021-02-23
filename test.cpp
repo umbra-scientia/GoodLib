@@ -5,8 +5,8 @@
 
 using namespace std;
 
-void onUDP(void* userdata, void* data, int length, udp_address_t from_hint) {
-	printf("onUDP(%d bytes) addrlen=%d\n", length, from_hint.len);
+void onUDP(void* userdata, void* data, int length, u64 timestamp, udp_address_t from_hint) {
+	printf("onUDP(%d bytes, timestamp=%lu, addrlen=%d)\n", length, timestamp, from_hint.len);
 }
 
 int main() {
