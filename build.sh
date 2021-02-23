@@ -1,2 +1,2 @@
 #!/bin/sh
-g++ test.cpp -o test src/*.* -pthread -Iinclude
+g++ test.cpp -g -o test src/*.* -pthread -Iinclude

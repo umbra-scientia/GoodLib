@@ -1,5 +1,6 @@
-#include "../include/goodlib/channel.h"
-#include <cstdlib>
+#include "channel.h"
+#include <stdlib.h>
+#include <string.h>
 #include <random>
 #include <thread>
 

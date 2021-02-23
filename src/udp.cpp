@@ -77,7 +77,7 @@ udp_address_t::udp_address_t() {
 }
 
 udp_address_t::~udp_address_t() {
-	if (crap) freeaddrinfo(crap);
+	//if (owner && crap) freeaddrinfo(crap);
 }
 
 udp_address_t UDP::Lookup(const char* hostname) {
@@ -240,8 +240,9 @@ void UDP::UnListen(udp_callback_t callback, void* userdata) {
 	end_event[0] = 0;
 	end_event[1] = 0;
 #endif
-
-	thread_handle->join();
-	delete thread_handle;
+	if (thread_handle) {
+		thread_handle->join();
+		delete thread_handle;
+	}
 	thread_handle = nullptr;
 }
