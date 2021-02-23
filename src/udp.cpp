@@ -1,4 +1,5 @@
 #include "udp.h"
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -7,10 +8,10 @@
 #include <unordered_set>
 
 using namespace std;
+using namespace std::chrono;
+using namespace std::literals::chrono_literals;
 
-#ifndef SOCKET
-#define SOCKET int
-#endif
+const steady_clock::time_point y2k { January / 1 / 2000 };
 
 // #define USE_RAW_SOCKETS
 
@@ -99,7 +100,7 @@ udp_address_t UDP::Lookup(const char* hostname) {
 	return r;
 }
 
-void UDP::Send(const void* buffer, int length, udp_address_t addr) {
+u64 UDP::Send(const void* buffer, int length, udp_address_t addr) {
 	static auto out = ([] {
 		printf("sawkit\n");
 		auto out = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -114,6 +115,7 @@ void UDP::Send(const void* buffer, int length, udp_address_t addr) {
 	adr.sin_addr.s_addr = INADDR_ANY;
 
 	sendto(out, (char*)buffer, length, 0, (const sockaddr*)&adr, sizeof(adr));
+	return duration_cast<milliseconds>(steady_clock::now() - y2k).count();
 }
 
 void UDP::Listen(udp_callback_t callback, void* userdata) {
@@ -196,6 +198,8 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			}
 #endif
 
+			u64 timestamp = duration_cast<milliseconds>(steady_clock::now() - y2k).count();
+
 			int offset = 0;
 #ifdef USE_RAW_SOCKETS
 			if (from.sin_family == AF_INET) {
@@ -211,7 +215,7 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			for (auto [callback, userdata] : cbs) {
 				udp_address_t address;
 				// address { (sockaddr*)&from, fromSize };
-				callback(userdata, &buf[offset], len - offset, address);
+				callback(userdata, &buf[offset], len - offset, timestamp, address);
 			}
 		}
 

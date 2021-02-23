@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #endif // #ifdef _WIN32
+#include "types.h"
 
 struct udp_address_t {
 	int proto;
@@ -27,11 +28,13 @@ struct udp_address_t {
 	struct addrinfo* crap;
 };
 
-typedef void (*udp_callback_t)(void* userdata, void* data, int length, udp_address_t from_hint);
+/// timestamp is milliseconds since y2k as recorded from a monotonic clock
+typedef void (*udp_callback_t)(void* userdata, void* data, int length, u64 timestamp, udp_address_t from_hint);
 
 struct UDP {
 	static udp_address_t Lookup(const char* hostname);
-	static void Send(const void* buffer, int length, udp_address_t addr = {});
+	/// returns milliseconds since y2k as recorded from a monotonic clock
+	static u64 Send(const void* buffer, int length, udp_address_t addr = {});
 	static void Listen(udp_callback_t callback, void* userdata = 0);
 	static void UnListen(udp_callback_t callback, void* userdata = 0);
 };
