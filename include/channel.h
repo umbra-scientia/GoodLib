@@ -1,5 +1,6 @@
 #include "types.h"
 #include "udp.h"
+#include <bitset>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -19,6 +20,7 @@ typedef void (*PacketCallback)(Channel*, const PacketStatus*);
 struct PacketStatus {
 	bool confirmed, failed;
 	PacketCallback onConfirm, onFail;
+	u64 timestamp;
 };
 
 struct Channel {
@@ -52,4 +54,5 @@ struct Channel {
 	u32 next_lseq = 0, rseq = 0;
 	bool rseqs[history_len];
 	std::unordered_map<u32, PacketStatus*> statuses;
+	f32 rate = 0;
 };
