@@ -5,8 +5,8 @@
 
 using namespace std;
 
-void onUDP(void* userdata, void* data, int length, u64 timestamp, udp_address_t from_hint) {
-	printf("onUDP(%d bytes, timestamp=%lu, addrlen=%d)\n", length, timestamp, from_hint.len);
+void onUDP(void* userdata, void* data, int length, u64 timestamp, udp_address_t* from_hint) {
+	printf("onUDP(%d bytes, timestamp=%lu, from_hint=%s)\n", length, timestamp, from_hint->ToString().c_str());
 }
 
 int main() {
@@ -14,7 +14,7 @@ int main() {
 	UDP::Listen(onUDP);
 	this_thread::sleep_for(1s);
 	
-	auto localhost = UDP::Lookup("localhost");
+	auto localhost = UDP::Lookup("127.0.0.1");
 	UDP::Send("test", 4, localhost);
 	this_thread::sleep_for(1s);
 	

@@ -40,11 +40,11 @@ namespace channel {
 
 using namespace channel;
 
-void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t from_hint) {
+void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t* from_hint) {
 	auto channel = (Channel*)userdata;
 
 	// TODO: use crypto stuff in header instead of this
-	if (memcmp(channel->user->address.addr->sa_data, from_hint.addr->sa_data, 14) != 0) { return; }
+	if (memcmp(channel->user->address.addr->sa_data, from_hint->addr->sa_data, 14) != 0) { return; }
 
 	auto header = ((u32*)data)[0];
 	auto rseq = (channel->rseq & 0xFFFFFC00) | (header >> 22);
