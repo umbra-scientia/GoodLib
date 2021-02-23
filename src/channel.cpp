@@ -17,7 +17,7 @@ namespace channel {
 	vector<SendData> sendbuf;
 	thread* thread_handle = nullptr;
 
-	u64 ewma_step(u64 x, u64 new_x, f64 weight) { return x * weight + new_x * (1 - weight); }
+	f32 ewma_step(f32 x, f32 new_x, f32 weight) { return x * weight + new_x * (1 - weight); }
 
 	void init() {
 		if (thread_handle) { return; }
@@ -51,7 +51,7 @@ void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t 
 	auto lseq = (channel->next_lseq & 0xFFFFFC00) | ((header >> 12) & 0x3FF);
 	if (lseq > channel->next_lseq) { lseq -= 0x200; }
 
-	auto new_rate = timestamp - channel->statuses.at(lseq)->timestamp;
+	auto new_rate = 1000.0 / (timestamp - channel->statuses.at(lseq)->timestamp);
 	channel->rate = ewma_step(channel->rate, new_rate, 0.9);
 
 	channel->rseqs[rseq % Channel::history_len] = true;
