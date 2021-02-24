@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <GL/glew.h>
+#include <glew/glew.h>
 #if defined(GLEW_EGL)
 #include <GL/eglew.h>
 #elif defined(GLEW_OSMESA)

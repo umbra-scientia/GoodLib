@@ -12,19 +12,20 @@ void onUDP(void* userdata, void* data, int length, u64 timestamp, udp_address_t*
 	printf("onUDP(%d bytes, timestamp=%lu, from_hint=%s)\n", length, timestamp, from_hint->ToString().c_str());
 }
 
-struct TestWindowEventHandler {
-	virtual void OnResize(int w, int h) {}
-	virtual void OnMotion(int axis, float x, float y) {}
-	virtual void OnButton(ButtonCode btn, int state) {}
-	virtual void OnRender(RenderContext*) {}
+struct TestWindowEventHandler : public WindowEventHandler {
+	bool knitted;
+	void OnResize(int w, int h) {}
+	void OnMotion(int axis, float x, float y) {}
+	void OnButton(ButtonCode btn, int state) {}
+	void OnRender(RenderContext*) {
+		if (!knitted) {
+			glewInit();
+			knitted = true;
+		}
+		glClearColor(0,0,0,0);
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
 };
-
-void inputMotion(float x, float y) {}
-void inputButton(int btn, int state) {}
-void render() {
-    glClearColor(0,0,0,0);
-    glClear(GL_COLOR_BUFFER_BIT);
-}
 
 int main() {
 	//printf("Hello, World!\n");
@@ -42,6 +43,8 @@ int main() {
 	
 	Ref<Window> win = new WindowSDL(OpenGL, "test");
 	win->SetSize(640, 480);
+	TestWindowEventHandler hannler;
+	win->Handler = &hannler;
 	win->Open();
 	win->Wait();
 	return 0;
