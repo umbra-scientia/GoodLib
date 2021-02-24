@@ -3,7 +3,7 @@
 Mostly implemented APIs:
 * UDP
 * Channel
-* HData
+* TreeData
 
 Not-really implemented APIs:
 * User
