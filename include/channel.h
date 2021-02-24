@@ -15,13 +15,13 @@ struct User {
 struct Channel;
 struct PacketStatus;
 typedef void (*ChannelCallback)(Channel*, const void* data, u32 length);
-/// buflen contains the length of buf. packets cannot be larger than buflen.
-/// callback should copy the data to be sent into `buf`, then set buflen to the length of that data. setting buflen to 0
-/// will skip sending anything.
-typedef void (*ChannelSendCallback)(Channel*, u32 id, void* buf, u32* buflen, PacketCallback* onConfirm);
 /// status is 1 if confirmed, 0 if probably failed, or -1 if definitely failed
 /// deliveryProbability is between 0 and 1
 typedef void (*PacketCallback)(Channel*, u32 id, int status, f32 deliveryProbability);
+/// datalen contains the length of data. packets cannot be larger than datalen.
+/// callback should copy the data to be sent into `data`, then set datalen to the length of that data. setting datalen
+/// to 0 will skip sending anything.
+typedef void (*ChannelSendCallback)(Channel*, u32 id, void* data, u32* datalen, PacketCallback* onConfirm);
 
 struct PacketStatus {
 	PacketCallback onConfirm;
@@ -50,13 +50,14 @@ struct Channel {
 	Channel(User* user, std::string app);
 	~Channel();
 	void Recv(ChannelCallback callback, void* userdata);
-	void OnSend(ChannelSendCallback callback);
+	void SetSendCallback(ChannelSendCallback callback);
 	void SendImmediate(const void* data, u32 length, PacketCallback onConfirm = nullptr);
 	f32 GetLatency();
 
 	User* user;
 	std::string app;
 	std::unordered_set<CallbackData, CallbackDataHash> callbacks;
+	ChannelSendCallback sendCallback;
 	u32 next_lseq = 0, rseq = 0;
 	bool rseqs[history_len];
 	std::unordered_map<u32, PacketStatus> statuses;

@@ -1,24 +1,37 @@
 #include "channel.h"
+#include <cassert>
+#include <random>
 #include <stdlib.h>
 #include <string.h>
-#include <random>
 #include <thread>
 
 using namespace std;
 using namespace std::chrono;
 
 namespace channel {
-	struct SendData {
-		Channel* channel;
-		u32 lseq;
-		void* data;
-		u32 length;
-	};
+	const u32 PACKET_SIZE = 1337;
+	const u32 HEADER_SIZE = 16;
 
-	vector<SendData> sendbuf;
+	unordered_set<Channel*> channels;
 	thread* thread_handle = nullptr;
 
 	f32 ewma_step(f32 x, f32 new_x, f32 weight) { return x * weight + new_x * (1 - weight); }
+
+	void createHeader(Channel* channel, void* data) {
+		auto lseq = channel->next_lseq;
+		auto rseq = channel->rseq;
+
+		auto header = &((u32*)data)[0];
+		// 10 bits for lseq, 10 for latest rseq, and 12 for prev rseqs
+		*header = (lseq << 22) | (rseq & 0x3FF << 12);
+		for (size_t i = 1; i <= 12; i++) {
+			*header |= channel->rseqs[(rseq - i + Channel::history_len) % Channel::history_len] << i;
+		}
+		// TODO: 12 bytes of crypto stuff
+		for (size_t i = 1; i < 4; i++) {
+			((i32*)data)[i] = 0;
+		}
+	}
 
 	void init() {
 		if (thread_handle) { return; }
@@ -28,10 +41,18 @@ namespace channel {
 				// TODO: make dynamic
 				this_thread::sleep_for(100ms);
 
-				for (auto&& send : sendbuf) {
-					send.channel->statuses.at(send.lseq)->timestamp =
-						UDP::Send(send.data, send.length, send.channel->user->address);
-					free(send.data);
+				for (auto channel : channels) {
+					auto lseq = channel->next_lseq;
+					u32 datalen = PACKET_SIZE - HEADER_SIZE;
+					u8 data[PACKET_SIZE];
+					PacketCallback onConfirm = nullptr;
+					channel->sendCallback(channel, lseq, &data[HEADER_SIZE], &datalen, &onConfirm);
+					if (!datalen) { continue; }
+
+					createHeader(channel, data);
+					auto timestamp = UDP::Send(data, datalen, channel->user->address);
+					channel->statuses.insert({ lseq, PacketStatus { onConfirm, timestamp } });
+					channel->next_lseq++;
 				}
 			}
 		});
@@ -52,7 +73,9 @@ void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t*
 	auto lseq = (channel->next_lseq & 0xFFFFFC00) | ((header >> 12) & 0x3FF);
 	if (lseq > channel->next_lseq) { lseq -= 0x200; }
 
-	auto new_rate = 1000.0 / (timestamp - channel->statuses.at(lseq)->timestamp);
+	auto&& status = channel->statuses.at(lseq);
+
+	auto new_rate = 1000.0 / (timestamp - status.timestamp);
 	channel->rate = ewma_step(channel->rate, new_rate, 0.9);
 
 	channel->rseqs[rseq % Channel::history_len] = true;
@@ -63,21 +86,21 @@ void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t*
 		channel->rseq = rseq;
 	}
 
-	auto&& status = channel->statuses.at(lseq);
-	status->confirmed = true;
-	status->onConfirm(channel, status);
+	status.onConfirm(channel, lseq, 1, 1);
+	channel->statuses.erase(lseq);
+
 	for (size_t i = 1; i <= 12; i++) {
 		auto flag = (header >> (i - 1)) & 1;
 		if (flag) {
-			auto&& status = channel->statuses.at(lseq - i);
-			if (status->confirmed) { continue; }
-			status->confirmed = true;
-			status->onConfirm(channel, status);
+			auto lseq2 = lseq - i;
+			auto&& status = channel->statuses.at(lseq2);
+			status.onConfirm(channel, lseq2, 1, 1);
+			channel->statuses.erase(lseq2);
 		}
 	}
 
 	for (auto [callback, userdata] : channel->callbacks) {
-		callback(channel, &((char*)data)[16], length - 16);
+		callback(channel, &((char*)data)[HEADER_SIZE], length - HEADER_SIZE);
 	}
 }
 
@@ -85,36 +108,33 @@ Channel::Channel(User* user, std::string app) {
 	this->user = user;
 	this->app = app;
 	*rseqs = {};
+	channels.insert(this);
 	UDP::Listen(udpcb, this);
 }
 
 Channel::~Channel() {
 	UDP::UnListen(udpcb, this);
+	channels.erase(this);
 }
 
 void Channel::Recv(ChannelCallback callback, void* userdata) {
 	callbacks.insert({ callback, userdata });
 }
 
-void Channel::Send(const void* data, u32 length, PacketStatus* handler) {
-	auto lseq = next_lseq++;
+void Channel::SetSendCallback(ChannelSendCallback callback) {
+	sendCallback = callback;
+}
 
-	auto tosend = (char*)malloc(length + 16);
-	auto header = &((u32*)tosend)[0];
-	// 10 bits for lseq, 10 for latest rseq, and 12 for prev rseqs
-	*header = (lseq << 22) | (rseq & 0x3FF << 12);
-	for (size_t i = 1; i <= 12; i++) {
-		*header |= rseqs[(rseq - i + history_len) % history_len] << i;
-	}
-	// TODO: 12 bytes of crypto stuff
-	for (size_t i = 1; i < 4; i++) {
-		((i32*)tosend)[i] = 0;
-	}
-	// rest of data
-	memcpy(&tosend[16], data, length);
+void Channel::SendImmediate(const void* data, u32 length, PacketCallback onConfirm) {
+	assert(length < PACKET_SIZE - HEADER_SIZE);
 
-	sendbuf.push_back(SendData { this, lseq, tosend, length });
-	statuses.insert({ lseq++, handler });
+	u8 tosend[PACKET_SIZE];
+	createHeader(this, tosend);
+	memcpy(&tosend[HEADER_SIZE], data, length);
+
+	auto timestamp = UDP::Send(data, length, user->address);
+	statuses.insert({ next_lseq, PacketStatus { onConfirm, timestamp } });
+	next_lseq++;
 }
 
 f32 Channel::GetLatency() {
