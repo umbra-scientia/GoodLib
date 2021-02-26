@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <glew/glew.h>
 #include "udp.h"
+#include "tcp.h"
 #include "channel.h"
 #include "window.h"
 #include "window_sdl.h"
@@ -41,11 +42,32 @@ int main() {
 	UDP::UnListen(onUDP);
 	*/
 	
+	/*
 	Ref<Window> win = new WindowSDL(OpenGL, "test");
 	win->SetSize(640, 480);
 	TestWindowEventHandler hannler;
 	win->Handler = &hannler;
 	win->Open();
 	win->Wait();
+	*/
+	
+	/*
+	auto ta = tcp_address_t::Lookup("127.0.0.1", 1234);
+	auto tc = new TCPConnection(ta);
+	tc->Write("test\n", 5);
+	delete tc;
+	*/
+	struct TestLissner : public TCPListener {
+		TestLissner(int port) : TCPListener(port) {}
+		bool OnConnect(TCPConnection* con, Ref<tcp_address_t> addr) {
+			printf("Incoming TCP(%p) from %s\n", con, addr->ToString().c_str());
+			con->Write("pony\n", 5);
+			delete con;
+			return true;
+		}
+	};
+	TestLissner tl(1235);
+	tl.Wait();
+	
 	return 0;
 }
