@@ -52,7 +52,8 @@ struct Channel {
 	~Channel();
 	void Recv(ChannelCallback callback, void* userdata);
 	void SetSendCallback(ChannelSendCallback callback);
-	void SendImmediate(const void* data, u32 length, PacketCallback onConfirm = nullptr);
+	/// returns packet id
+	u32 SendImmediate(const void* data, u32 length, PacketCallback onConfirm = nullptr);
 	f32 GetLatency();
 
 	User* user;

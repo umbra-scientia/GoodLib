@@ -50,7 +50,7 @@ namespace channel {
 					if (!datalen) { continue; }
 
 					createHeader(channel, data);
-					auto timestamp = UDP::Send(data, datalen, channel->user->address);
+					auto timestamp = UDP::Send(data, datalen + HEADER_SIZE, channel->user->address);
 					channel->statuses.insert({ lseq, PacketStatus { onConfirm, timestamp } });
 					channel->next_lseq++;
 				}
@@ -125,16 +125,17 @@ void Channel::SetSendCallback(ChannelSendCallback callback) {
 	sendCallback = callback;
 }
 
-void Channel::SendImmediate(const void* data, u32 length, PacketCallback onConfirm) {
+u32 Channel::SendImmediate(const void* data, u32 length, PacketCallback onConfirm) {
 	assert(length < PACKET_SIZE - HEADER_SIZE);
 
 	u8 tosend[PACKET_SIZE];
 	createHeader(this, tosend);
 	memcpy(&tosend[HEADER_SIZE], data, length);
 
+	auto lseq = next_lseq++;
 	auto timestamp = UDP::Send(data, length, user->address);
-	statuses.insert({ next_lseq, PacketStatus { onConfirm, timestamp } });
-	next_lseq++;
+	statuses.insert({ lseq, PacketStatus { onConfirm, timestamp } });
+	return lseq;
 }
 
 f32 Channel::GetLatency() {
