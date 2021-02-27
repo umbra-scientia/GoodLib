@@ -6,6 +6,7 @@
 #include "channel.h"
 #include "window.h"
 #include "window_sdl.h"
+#include "http.h"
 
 using namespace std;
 
@@ -57,17 +58,21 @@ int main() {
 	tc->Write("test\n", 5);
 	delete tc;
 	*/
+	
+	/*
 	struct TestLissner : public TCPListener {
 		TestLissner(int port) : TCPListener(port) {}
-		bool OnConnect(TCPConnection* con, Ref<tcp_address_t> addr) {
+		void OnConnect(Ref<TCPConnection> con, Ref<tcp_address_t> addr) {
 			printf("Incoming TCP(%p) from %s\n", con, addr->ToString().c_str());
 			con->Write("pony\n", 5);
-			delete con;
-			return true;
 		}
 	};
 	TestLissner tl(1235);
 	tl.Wait();
+	*/
 	
+	HTTPListener hl(8080);
+	hl.Wait();
+
 	return 0;
 }

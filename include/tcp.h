@@ -32,7 +32,7 @@ struct tcp_address_t : public RCObj {
 	int port;
 };
 
-struct TCPConnection {
+struct TCPConnection : public RCObj {
 	TCPConnection(int fd);
 	TCPConnection(Ref<tcp_address_t> ad);
 	~TCPConnection();
@@ -50,7 +50,7 @@ struct TCPListener {
 	~TCPListener();
 	void Wait();
 
-	virtual bool OnConnect(TCPConnection* con, Ref<tcp_address_t> from_hint) = 0;
+	virtual void OnConnect(Ref<TCPConnection> con, Ref<tcp_address_t> from_hint) = 0;
 	std::thread* worker;
 	void workerfn();
 	int port;

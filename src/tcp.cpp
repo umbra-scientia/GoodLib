@@ -146,6 +146,9 @@ int TCPConnection::Read(void* buffer, int length) {
 	}
 	return e;
 }
+bool TCPConnection::Valid() {
+	return valid;
+}
 
 TCPListener::TCPListener(int port_) {
 	port = port_;
@@ -193,8 +196,8 @@ void TCPListener::workerfn() {
 		int cs = accept(ls, ta->addr, &ta->len);
 		if (cs < 0) continue;
 		thread* t = new thread([=](){
-			auto tc = new TCPConnection(cs);
-			if (!OnConnect(tc, ta)) delete tc;
+			Ref<TCPConnection> tc = new TCPConnection(cs);
+			OnConnect(tc, ta);
 		});
 		t->detach();
 		delete t;
