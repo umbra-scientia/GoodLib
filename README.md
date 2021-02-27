@@ -1,10 +1,9 @@
 # GoodLib
 
-Mostly implemented APIs:
+APIs with some amount of implemented-ness:
 * UDP
 * Channel
 * TreeData
 * Window
-
-Not-really implemented APIs:
-* User
+* TCP
+* HTTP
