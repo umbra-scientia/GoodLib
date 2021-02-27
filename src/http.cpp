@@ -1,13 +1,30 @@
 #include "http.h"
+#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
 
 using namespace std;
 
+struct HTTP_STATUS_CODE_t {
+	HTTP_STATUS_CODE_t() {
+		table[100] = "Continue";
+		table[200] = "OK";
+		table[304] = "Not Modified";
+		table[403] = "Forbidden";
+		table[404] = "File Not Found";
+		table[500] = "Internal Server Error";
+		// FIXME add these strings
+	}
+	string operator[](unsigned short x) {
+		return table[x];
+	}
+	map<unsigned short, string> table;
+};
+HTTP_STATUS_CODE_t HTTP_STATUS_CODE;
+
 void HTTPListener::OnConnect(Ref<TCPConnection> con, Ref<tcp_address_t> from_hint) {
 	Ref<HTTPRequest> req = new HTTPRequest();
-	req->con = con;
 	string key, value;
 	int state = 0;
 	while (con->Valid()) {
@@ -59,14 +76,30 @@ void HTTPListener::OnConnect(Ref<TCPConnection> con, Ref<tcp_address_t> from_hin
 		}
 		if (state == 8) {
 			// FIXME: download POST data.
-			if (!OnRequest(req)) {
-				con->Write("HTTP/1.1 400 ERROR\n\n", 20);
+			auto res = OnRequest(req, con);
+			if (res) {
+				if (!res->status.size()) {
+					res->status = HTTP_STATUS_CODE[res->code & 0xFFFF];
+				}
+				stringstream ss;
+				ss << "HTTP/1.1 " << res->code << res->status << "\n";
+				for (auto i: res->headers) {
+					for (auto j: i.second) {
+						ss << i.first << ": " << j << "\n";
+					}
+				}
+				ss << "\n";
+				auto head = ss.str();
+				con->Write(head.data(), head.size());
+				con->Write(res->body.data(), res->body.size());
+			} else {
+				con->Write("HTTP/1.1 500 ERROR\n\n", 20);
 			}
 			return;
 		}
 	}
 }
 
-bool HTTPListener::OnRequest(Ref<HTTPRequest> req) {
-	return false;
+Ref<HTTPResponse> HTTPListener::OnRequest(Ref<HTTPRequest> req, Ref<TCPConnection> con) {
+	return nullptr;
 }

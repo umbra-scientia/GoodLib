@@ -71,30 +71,17 @@ int main() {
 	tl.Wait();
 	*/
 	
-	struct omgponies : public HTTPListener {
-		omgponies(int port) : HTTPListener(port) {}
-		bool OnRequest(Ref<HTTPRequest> req) {
-			printf("HTTP Request:\ncmd=%s\npath=%s\nproto=%s\nheaders.size()=%d\n", req->cmd.c_str(), req->path.c_str(), req->proto.c_str(), req->headers.size());
-			for(auto i: req->headers) {
-				if (!i.second.size()) {
-					printf("headers[\"%s\"]=[]\n", i.first.c_str());
-					continue;
-				}
-				printf("headers[\"%s\"]=[\n", i.first.c_str());
-				for(auto j: i.second) {
-					printf("\t%s\n", j.c_str());
-				}
-				printf("]\n", i.first.c_str());
-			}
-			printf("\n");
-			
-			req->con->Write("HTTP/1.1 200 OK\n\n", 17);
-			req->con->Write("Hello, World!", 13);
-			return true;
+	struct HelloServer : public HTTPListener {
+		HelloServer(int port) : HTTPListener(port) {}
+		Ref<HTTPResponse> OnRequest(Ref<HTTPRequest> req, Ref<TCPConnection> con) {
+			Ref<HTTPResponse> res = new HTTPResponse();
+			res->code = 200;
+			res->Append("Hello, World!");
+			return res;
 		}
 	};
-	omgponies ponieeessss(8080);
-	ponieeessss.Wait();
+	HelloServer http(8080);
+	http.Wait();
 
 	return 0;
 }
