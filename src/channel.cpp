@@ -46,7 +46,9 @@ namespace channel {
 					u32 datalen = PACKET_SIZE - HEADER_SIZE;
 					u8 data[PACKET_SIZE];
 					PacketCallback onConfirm = nullptr;
-					channel->sendCallback(channel, lseq, &data[HEADER_SIZE], &datalen, &onConfirm);
+					if (channel->sendCallback) {
+						channel->sendCallback(channel, lseq, &data[HEADER_SIZE], &datalen, &onConfirm);
+					}
 					if (!datalen) { continue; }
 
 					createHeader(channel, data);
@@ -99,14 +101,16 @@ void udpcb(void* userdata, void* data, int length, u64 timestamp, udp_address_t*
 		}
 	}
 
-	for (auto [callback, userdata] : channel->callbacks) {
-		callback(channel, &((char*)data)[HEADER_SIZE], length - HEADER_SIZE);
+	if (channel->recvCallback) {
+		channel->recvCallback(channel, &((char*)data)[HEADER_SIZE], length - HEADER_SIZE);
 	}
 }
 
 Channel::Channel(User* user, std::string app) {
 	this->user = user;
 	this->app = app;
+	recvCallback = nullptr;
+	sendCallback = nullptr;
 	*rseqs = {};
 	channels.insert(this);
 	UDP::Listen(udpcb, this);
@@ -117,8 +121,8 @@ Channel::~Channel() {
 	channels.erase(this);
 }
 
-void Channel::Recv(ChannelCallback callback, void* userdata) {
-	callbacks.insert({ callback, userdata });
+void Channel::SetRecvCallback(ChannelRecvCallback callback) {
+	recvCallback = callback;
 }
 
 void Channel::SetSendCallback(ChannelSendCallback callback) {

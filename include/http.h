@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <string.h>
 
 struct HTTPRequest : public RCObj {
 	std::string cmd, path, proto;

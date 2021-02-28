@@ -291,9 +291,9 @@ void UDP::Listen(udp_callback_t callback, void* userdata) {
 			address.proto = AF_INET;
 			address.addr = (sockaddr*)&from;
 			address.len = fromSize;
-			for (auto [callback, userdata] : cbs) {
+			for (auto i: cbs) {
 				// address { (sockaddr*)&from, fromSize };
-				callback(userdata, &buf[offset], len - offset, timestamp, &address);
+				i.callback(i.userdata, &buf[offset], len - offset, timestamp, &address);
 			}
 		}
 

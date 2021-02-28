@@ -1,5 +1,11 @@
 #!/bin/sh
-BUILD_TOOL="g++"
-if which auc >/dev/null; then BUILD_TOOL="auc -v"; fi
+if which auc >/dev/null; then BUILD_TOOL="auc -v"; else BUILD_TOOL="g++"; fi
 
-$BUILD_TOOL test.cpp -std=c++2a -g -o test src/*.* libs/glew/glew.c -lpthread -Ilibs -Iinclude `sdl2-config --cflags --libs` -lGL
+OUT="test"
+SRCS="test.cpp src/*.* libs/glew/glew.c libs/crypto/*.c"
+#FLAGS="-std=c++2a -g"
+FLAGS="-g"
+INCS="-Ilibs -Ilibs/crypto -Iinclude `sdl2-config --cflags`"
+LIBS="`sdl2-config --libs` -lpthread -lGL"
+
+$BUILD_TOOL -o $OUT $FLAGS $INCS $SRCS $LIBS
